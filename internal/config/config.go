@@ -70,4 +70,6 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("server.listen_addr", ":8080")
 	v.SetDefault("server.queue_size", 1000)
+
+	v.SetDefault("database.dsn", "postgres://postgres:postgres@localhost:5432/xsmpp?sslmode=disable")
 }

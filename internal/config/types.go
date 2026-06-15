@@ -9,6 +9,7 @@ type Config struct {
 	DefaultDest AddressConfig
 	TLS         TLSConfig
 	Server      ServerConfig
+	Database    DatabaseConfig
 	Encoding    string
 }
 
@@ -41,6 +42,10 @@ type TLSConfig struct {
 type ServerConfig struct {
 	ListenAddr string
 	QueueSize  int
+}
+
+type DatabaseConfig struct {
+	DSN string
 }
 
 func (c *Config) IsProd() bool { return c.App.Env == "production" }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/linxGnu/gosmpp/pdu"
+	"x-smpp-client/internal/models"
 )
 
 type DeliveryReceipt struct {
@@ -60,6 +61,15 @@ func ParseDeliveryReceipt(msg string) (*DeliveryReceipt, error) {
 	}
 
 	return r, nil
+}
+
+func (r *DeliveryReceipt) ToModel() models.DeliveryReceipt {
+	return models.DeliveryReceipt{
+		MessageID:  r.MessageID,
+		Status:     r.Status,
+		ErrorCode:  r.Err,
+		ReceivedAt: time.Now(),
+	}
 }
 
 func IsDeliveryReceipt(pd *pdu.DeliverSM) bool {

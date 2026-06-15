@@ -9,8 +9,11 @@ import (
 	"syscall"
 
 	"github.com/linxGnu/gosmpp/pdu"
+	"x-smpp-client/internal/accounts/repository"
+	"x-smpp-client/internal/accounts/service"
 	"x-smpp-client/internal/api"
 	"x-smpp-client/internal/config"
+	"x-smpp-client/internal/database"
 	"x-smpp-client/internal/queue"
 	"x-smpp-client/internal/session"
 )
@@ -21,11 +24,24 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
+	db, err := database.New(context.Background(), cfg.Database.DSN)
+	if err != nil {
+		log.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Migrate(context.Background()); err != nil {
+		log.Fatalf("migrate database: %v", err)
+	}
+
+	repo := repository.NewPostgresRepo(db)
+	svc := service.New(repo)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	pool := session.NewPool(cfg)
-	pool.OnPDU(handlePDU())
+	pool.OnPDU(makePDUHandler(svc))
 
 	if err := pool.Start(ctx); err != nil {
 		log.Fatalf("start session pool: %v", err)
@@ -33,7 +49,7 @@ func main() {
 
 	msgQueue := queue.New(cfg.Server.QueueSize)
 
-	worker := queue.NewWorker(pool, msgQueue, queue.Defaults{
+	worker := queue.NewWorker(pool, msgQueue, svc, queue.Defaults{
 		SourceAddr: cfg.SourceAddr.Address,
 		SourceTon:  cfg.SourceAddr.Ton,
 		SourceNpi:  cfg.SourceAddr.Npi,
@@ -51,7 +67,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		srv := api.New(msgQueue, cfg.Server)
+		srv := api.New(msgQueue, svc, cfg.Server)
 		if err := srv.Serve(ctx); err != nil {
 			log.Printf("api server error: %v", err)
 		}
@@ -62,7 +78,7 @@ func main() {
 	log.Println("shutdown complete")
 }
 
-func handlePDU() session.PDUHandler {
+func makePDUHandler(svc *service.Service) session.PDUHandler {
 	concatenated := map[byte][]string{}
 	return func(p pdu.PDU) {
 		switch pd := p.(type) {
@@ -91,10 +107,12 @@ func handlePDU() session.PDUHandler {
 					log.Printf("parse delivery receipt error: %v", err)
 					return
 				}
-				log.Printf("DeliveryReceipt: id=%s stat=%s err=%s submit=%s done=%s",
-					receipt.MessageID, receipt.Status, receipt.Err,
-					receipt.SubmitDate.Format("2006-01-02 15:04:05"),
-					receipt.DoneDate.Format("2006-01-02 15:04:05"))
+				log.Printf("DeliveryReceipt: id=%s stat=%s err=%s",
+					receipt.MessageID, receipt.Status, receipt.Err)
+
+				dr := receipt.ToModel()
+				_ = svc.SaveDeliveryReceipt(context.Background(), &dr)
+				_ = svc.UpdateMessageStatus(context.Background(), receipt.MessageID, "delivered", 0, 0)
 				return
 			}
 

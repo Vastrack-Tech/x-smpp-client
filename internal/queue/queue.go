@@ -5,25 +5,27 @@ import (
 	"log"
 
 	"github.com/linxGnu/gosmpp/pdu"
+	"x-smpp-client/internal/accounts/service"
 	"x-smpp-client/internal/message"
+	"x-smpp-client/internal/models"
 	"x-smpp-client/internal/session"
 )
 
 type Queue struct {
-	ch chan message.Message
+	ch chan models.Message
 }
 
 func New(size int) *Queue {
 	return &Queue{
-		ch: make(chan message.Message, size),
+		ch: make(chan models.Message, size),
 	}
 }
 
-func (q *Queue) Push(msg message.Message) {
+func (q *Queue) Push(msg models.Message) {
 	q.ch <- msg
 }
 
-func (q *Queue) Consume() <-chan message.Message {
+func (q *Queue) Consume() <-chan models.Message {
 	return q.ch
 }
 
@@ -32,9 +34,10 @@ func (q *Queue) Len() int {
 }
 
 type Worker struct {
-	pool *session.Pool
-	q    *Queue
-	def  Defaults
+	pool  *session.Pool
+	q     *Queue
+	svc   *service.Service
+	def   Defaults
 }
 
 type Defaults struct {
@@ -44,8 +47,8 @@ type Defaults struct {
 	Encoding   string
 }
 
-func NewWorker(pool *session.Pool, q *Queue, def Defaults) *Worker {
-	return &Worker{pool: pool, q: q, def: def}
+func NewWorker(pool *session.Pool, q *Queue, svc *service.Service, def Defaults) *Worker {
+	return &Worker{pool: pool, q: q, svc: svc, def: def}
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -60,7 +63,7 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
-func (w *Worker) process(ctx context.Context, msg message.Message) {
+func (w *Worker) process(ctx context.Context, msg models.Message) {
 	enc := w.def.Encoding
 	if msg.Encoding != "" {
 		enc = msg.Encoding
@@ -68,39 +71,43 @@ func (w *Worker) process(ctx context.Context, msg message.Message) {
 	encoding, err := message.ParseEncoding(enc)
 	if err != nil {
 		log.Printf("message %s: %v", msg.ID, err)
+		_ = w.svc.UpdateMessageStatus(ctx, msg.ID, "failed", 0, 0)
 		return
 	}
 
 	srcAddr := msg.SourceAddr
-	srcTon := msg.SourceTon
-	srcNpi := msg.SourceNpi
+	srcTon := w.def.SourceTon
+	srcNpi := w.def.SourceNpi
 	if srcAddr == "" {
 		srcAddr = w.def.SourceAddr
-		srcTon = w.def.SourceTon
-		srcNpi = w.def.SourceNpi
-	}
-
-	destTon := msg.ToTon
-	destNpi := msg.ToNpi
-	if destTon == 0 && destNpi == 0 {
-		destTon = 1
-		destNpi = 1
 	}
 
 	src := buildAddr(srcTon, srcNpi, srcAddr)
-	dst := buildAddr(destTon, destNpi, msg.To)
+	dst := buildAddr(1, 1, msg.To)
 
 	result, err := session.SplitMessage(msg.Text, encoding, src, dst, 1)
 	if err != nil {
 		log.Printf("message %s: split error: %v", msg.ID, err)
+		_ = w.svc.UpdateMessageStatus(ctx, msg.ID, "failed", 0, 0)
 		return
 	}
+
+	cost := w.svc.EstimateCost(len(result.Parts))
+	_ = w.svc.UpdateMessageStatus(ctx, msg.ID, "sending", len(result.Parts), cost)
 
 	for _, sm := range result.Parts {
 		if err := w.pool.Send(sm); err != nil {
 			log.Printf("message %s: submit error: %v", msg.ID, err)
+			_ = w.svc.UpdateMessageStatus(ctx, msg.ID, "failed", len(result.Parts), cost)
+			return
 		}
 	}
+
+	if _, err := w.svc.DeductBalance(ctx, msg.AccountID, cost, "sms:"+msg.ID, "sms"); err != nil {
+		log.Printf("message %s: deduct balance error: %v", msg.ID, err)
+	}
+
+	_ = w.svc.UpdateMessageStatus(ctx, msg.ID, "sent", len(result.Parts), cost)
 }
 
 func buildAddr(ton, npi byte, addr string) pdu.Address {

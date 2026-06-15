@@ -1,27 +1,25 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"time"
 
+	"x-smpp-client/internal/accounts/handler"
+	"x-smpp-client/internal/accounts/service"
 	"x-smpp-client/internal/queue"
 )
 
 type Handler struct {
+	*handler.Handler
+	Accounts  *service.Service
 	Queue     *queue.Queue
 	StartTime time.Time
 }
 
-func New(q *queue.Queue) *Handler {
+func New(q *queue.Queue, svc *service.Service) *Handler {
 	return &Handler{
+		Handler:   handler.New(svc),
+		Accounts:  svc,
 		Queue:     q,
 		StartTime: time.Now(),
 	}
-}
-
-func newID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
