@@ -9,22 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/linxGnu/gosmpp"
 	"github.com/linxGnu/gosmpp/data"
 	"github.com/linxGnu/gosmpp/pdu"
 	"x-smpp-client/internal/config"
-
-	"crypto/tls"
-	"net"
-)
-
-var (
-	TLSDialer = func(addr string) (net.Conn, error) {
-		conf := &tls.Config{
-			InsecureSkipVerify: true,
-		}
-		return tls.Dial("tcp", addr, conf)
-	}
+	"x-smpp-client/internal/session"
 )
 
 func main() {
@@ -36,88 +24,64 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	pool := session.NewPool(cfg)
+	pool.OnPDU(handlePDU())
+
+	if err := pool.Start(ctx); err != nil {
+		log.Fatalf("start session pool: %v", err)
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go runSession(ctx, &wg, cfg)
+	go sendLoop(ctx, &wg, cfg, pool)
 
 	wg.Wait()
+	pool.Close()
 	log.Println("shutdown complete")
 }
 
-func runSession(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config) {
+func sendLoop(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, pool *session.Pool) {
 	defer wg.Done()
 
-	auth := gosmpp.Auth{
-		SMSC:       cfg.SMSC.Addr,
-		SystemID:   cfg.SMSC.SystemID,
-		Password:   cfg.SMSC.Password,
-		SystemType: cfg.SMSC.SystemType,
-	}
-
-	dialer := gosmpp.NonTLSDialer
-	if cfg.TLS.Enabled {
-		dialer = TLSDialer
-	}
-
-	session, err := gosmpp.NewSession(
-		gosmpp.TRXConnector(dialer, auth),
-		gosmpp.Settings{
-			EnquireLink: cfg.App.EnquireLink,
-			ReadTimeout: cfg.App.ReadTimeout,
-
-			OnSubmitError: func(_ pdu.PDU, err error) {
-				log.Printf("SubmitPDU error: %v", err)
-			},
-
-			OnReceivingError: func(err error) {
-				log.Printf("Receiving PDU/Network error: %v", err)
-			},
-
-			OnRebindingError: func(err error) {
-				log.Printf("Rebinding error: %v", err)
-			},
-
-			OnPDU: handlePDU(),
-
-			OnClosed: func(state gosmpp.State) {
-				log.Printf("Session closed: %v", state)
-			},
-		}, cfg.App.WriteTimeout)
-	if err != nil {
-		log.Printf("Failed to create session: %v", err)
-		return
-	}
-	defer func() {
-		_ = session.Close()
-	}()
-
-	log.Printf("connected to SMSC %s as %s", cfg.SMSC.Addr, cfg.SMSC.SystemID)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("shutting down sender")
 			return
-		default:
+		case <-ticker.C:
 		}
 
-		sm := newSubmitSM(cfg)
-		if err := session.Transceiver().Submit(sm); err != nil {
-			log.Printf("submit error: %v", err)
+		srcAddr := buildAddr(cfg.SourceAddr.Ton, cfg.SourceAddr.Npi, cfg.SourceAddr.Address)
+		destAddr := buildAddr(cfg.DefaultDest.Ton, cfg.DefaultDest.Npi, cfg.DefaultDest.Address)
+
+		result, err := session.SplitMessage("Hello World ", data.GSM7BIT, srcAddr, destAddr, 1)
+		if err != nil {
+			log.Printf("split message error: %v", err)
+			continue
 		}
 
-		select {
-		case <-ctx.Done():
-			log.Println("shutting down sender")
-			return
-		case <-time.After(5 * time.Second):
+		for _, sm := range result.Parts {
+			if err := pool.Send(sm); err != nil {
+				log.Printf("submit error: %v", err)
+			}
 		}
 	}
 }
 
-func handlePDU() func(pdu.PDU, bool) {
-	concatenated := map[uint8][]string{}
-	return func(p pdu.PDU, _ bool) {
+func buildAddr(ton, npi byte, addr string) pdu.Address {
+	a := pdu.NewAddress()
+	a.SetTon(ton)
+	a.SetNpi(npi)
+	_ = a.SetAddress(addr)
+	return a
+}
+
+func handlePDU() session.PDUHandler {
+	concatenated := map[byte][]string{}
+	return func(p pdu.PDU) {
 		switch pd := p.(type) {
 		case *pdu.SubmitSMResp:
 			log.Printf("SubmitSMResp: message_id=%s", pd.MessageID)
@@ -137,6 +101,20 @@ func handlePDU() func(pdu.PDU, bool) {
 				log.Printf("failed to get DeliverSM message: %v", err)
 				return
 			}
+
+			if session.IsDeliveryReceipt(pd) {
+				receipt, err := session.ParseDeliveryReceipt(message)
+				if err != nil {
+					log.Printf("parse delivery receipt error: %v", err)
+					return
+				}
+				log.Printf("DeliveryReceipt: id=%s stat=%s err=%s submit=%s done=%s",
+					receipt.MessageID, receipt.Status, receipt.Err,
+					receipt.SubmitDate.Format(time.RFC3339),
+					receipt.DoneDate.Format(time.RFC3339))
+				return
+			}
+
 			totalParts, sequence, reference, found := pd.Message.UDH().GetConcatInfo()
 			if found {
 				if _, ok := concatenated[reference]; !ok {
@@ -152,29 +130,6 @@ func handlePDU() func(pdu.PDU, bool) {
 			}
 		}
 	}
-}
-
-func newSubmitSM(cfg *config.Config) *pdu.SubmitSM {
-	srcAddr := pdu.NewAddress()
-	srcAddr.SetTon(cfg.SourceAddr.Ton)
-	srcAddr.SetNpi(cfg.SourceAddr.Npi)
-	_ = srcAddr.SetAddress(cfg.SourceAddr.Address)
-
-	destAddr := pdu.NewAddress()
-	destAddr.SetTon(cfg.DefaultDest.Ton)
-	destAddr.SetNpi(cfg.DefaultDest.Npi)
-	_ = destAddr.SetAddress(cfg.DefaultDest.Address)
-
-	submitSM := pdu.NewSubmitSM().(*pdu.SubmitSM)
-	submitSM.SourceAddr = srcAddr
-	submitSM.DestAddr = destAddr
-	_ = submitSM.Message.SetMessageWithEncoding("Hello World ", data.UCS2)
-	submitSM.ProtocolID = 0
-	submitSM.RegisteredDelivery = 1
-	submitSM.ReplaceIfPresentFlag = 0
-	submitSM.EsmClass = 0
-
-	return submitSM
 }
 
 func isConcatenatedDone(parts []string, total byte) bool {

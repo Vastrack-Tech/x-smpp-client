@@ -15,6 +15,7 @@ type AppConfig struct {
 	EnquireLink  time.Duration
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	PoolSize     int
 }
 
 type SMSCConfig struct {

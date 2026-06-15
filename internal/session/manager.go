@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"log"
 	"net"
 	"sync"
@@ -97,7 +98,18 @@ func (m *Manager) Send(sm *pdu.SubmitSM) error {
 	if session == nil {
 		return nil
 	}
-	return session.Transceiver().Submit(sm)
+
+	for {
+		err := session.Transceiver().Submit(sm)
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, gosmpp.ErrWindowsFull) {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		return err
+	}
 }
 
 func (m *Manager) OnPDU(handler PDUHandler) {

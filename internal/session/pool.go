@@ -5,8 +5,9 @@ import (
 	"log"
 	"sync/atomic"
 
-	"github.com/linxGnu/gosmpp/pdu"
 	"x-smpp-client/internal/config"
+
+	"github.com/linxGnu/gosmpp/pdu"
 )
 
 const DefaultPoolSize = 1

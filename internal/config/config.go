@@ -48,6 +48,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.enquire_link", "5s")
 	v.SetDefault("app.read_timeout", "10s")
 	v.SetDefault("app.write_timeout", "5s")
+	v.SetDefault("app.pool_size", 1)
 
 	v.SetDefault("smsc.addr", "smscsim.smpp.org:2775")
 	v.SetDefault("smsc.system_id", "SYSTEMID")
