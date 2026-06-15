@@ -8,6 +8,8 @@ type Config struct {
 	SourceAddr  AddressConfig
 	DefaultDest AddressConfig
 	TLS         TLSConfig
+	Server      ServerConfig
+	Encoding    string
 }
 
 type AppConfig struct {
@@ -34,6 +36,11 @@ type AddressConfig struct {
 type TLSConfig struct {
 	Enabled    bool
 	SkipVerify bool
+}
+
+type ServerConfig struct {
+	ListenAddr string
+	QueueSize  int
 }
 
 func (c *Config) IsProd() bool { return c.App.Env == "production" }

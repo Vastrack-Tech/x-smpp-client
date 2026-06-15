@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
-	"github.com/linxGnu/gosmpp/data"
 	"github.com/linxGnu/gosmpp/pdu"
+	"x-smpp-client/internal/api"
 	"x-smpp-client/internal/config"
+	"x-smpp-client/internal/queue"
 	"x-smpp-client/internal/session"
 )
 
@@ -31,52 +31,35 @@ func main() {
 		log.Fatalf("start session pool: %v", err)
 	}
 
+	msgQueue := queue.New(cfg.Server.QueueSize)
+
+	worker := queue.NewWorker(pool, msgQueue, queue.Defaults{
+		SourceAddr: cfg.SourceAddr.Address,
+		SourceTon:  cfg.SourceAddr.Ton,
+		SourceNpi:  cfg.SourceAddr.Npi,
+		Encoding:   cfg.Encoding,
+	})
+
 	var wg sync.WaitGroup
+
 	wg.Add(1)
-	go sendLoop(ctx, &wg, cfg, pool)
+	go func() {
+		defer wg.Done()
+		worker.Start(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		srv := api.New(msgQueue, cfg.Server)
+		if err := srv.Serve(ctx); err != nil {
+			log.Printf("api server error: %v", err)
+		}
+	}()
 
 	wg.Wait()
 	pool.Close()
 	log.Println("shutdown complete")
-}
-
-func sendLoop(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, pool *session.Pool) {
-	defer wg.Done()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("shutting down sender")
-			return
-		case <-ticker.C:
-		}
-
-		srcAddr := buildAddr(cfg.SourceAddr.Ton, cfg.SourceAddr.Npi, cfg.SourceAddr.Address)
-		destAddr := buildAddr(cfg.DefaultDest.Ton, cfg.DefaultDest.Npi, cfg.DefaultDest.Address)
-
-		result, err := session.SplitMessage("Hello World ", data.GSM7BIT, srcAddr, destAddr, 1)
-		if err != nil {
-			log.Printf("split message error: %v", err)
-			continue
-		}
-
-		for _, sm := range result.Parts {
-			if err := pool.Send(sm); err != nil {
-				log.Printf("submit error: %v", err)
-			}
-		}
-	}
-}
-
-func buildAddr(ton, npi byte, addr string) pdu.Address {
-	a := pdu.NewAddress()
-	a.SetTon(ton)
-	a.SetNpi(npi)
-	_ = a.SetAddress(addr)
-	return a
 }
 
 func handlePDU() session.PDUHandler {
@@ -110,8 +93,8 @@ func handlePDU() session.PDUHandler {
 				}
 				log.Printf("DeliveryReceipt: id=%s stat=%s err=%s submit=%s done=%s",
 					receipt.MessageID, receipt.Status, receipt.Err,
-					receipt.SubmitDate.Format(time.RFC3339),
-					receipt.DoneDate.Format(time.RFC3339))
+					receipt.SubmitDate.Format("2006-01-02 15:04:05"),
+					receipt.DoneDate.Format("2006-01-02 15:04:05"))
 				return
 			}
 

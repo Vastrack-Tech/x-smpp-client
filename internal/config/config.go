@@ -65,4 +65,9 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("tls.enabled", false)
 	v.SetDefault("tls.skip_verify", false)
+
+	v.SetDefault("encoding", "gsm")
+
+	v.SetDefault("server.listen_addr", ":8080")
+	v.SetDefault("server.queue_size", 1000)
 }
