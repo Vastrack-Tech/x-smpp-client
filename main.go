@@ -1,22 +1,24 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/linxGnu/gosmpp"
 	"github.com/linxGnu/gosmpp/data"
 	"github.com/linxGnu/gosmpp/pdu"
+	"x-smpp-client/internal/config"
 
 	"crypto/tls"
 	"net"
 )
 
 var (
-	// TLSDialer is tls connection dialer.
 	TLSDialer = func(addr string) (net.Conn, error) {
 		conf := &tls.Config{
 			InsecureSkipVerify: true,
@@ -26,64 +28,90 @@ var (
 )
 
 func main() {
-	var wg sync.WaitGroup
+	cfg, err := config.LoadConfig("")
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	var wg sync.WaitGroup
 	wg.Add(1)
-	go sendingAndReceiveSMS(&wg)
+	go runSession(ctx, &wg, cfg)
 
 	wg.Wait()
+	log.Println("shutdown complete")
 }
 
-func sendingAndReceiveSMS(wg *sync.WaitGroup) {
+func runSession(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config) {
 	defer wg.Done()
 
 	auth := gosmpp.Auth{
-		SMSC:       "smscsim.smpp.org:2775",
-		//SMSC:       "smscsim.melroselabs.com:8775",
-		SystemID:   "SYSTEMID",
-		Password:   "PASSWORD",
-		SystemType: "",
+		SMSC:       cfg.SMSC.Addr,
+		SystemID:   cfg.SMSC.SystemID,
+		Password:   cfg.SMSC.Password,
+		SystemType: cfg.SMSC.SystemType,
 	}
 
-	trans, err := gosmpp.NewSession(
-		gosmpp.TRXConnector(gosmpp.NonTLSDialer, auth),
-		//gosmpp.TRXConnector(TLSDialer, auth),
-		gosmpp.Settings{
-			EnquireLink: 5 * time.Second,
+	dialer := gosmpp.NonTLSDialer
+	if cfg.TLS.Enabled {
+		dialer = TLSDialer
+	}
 
-			ReadTimeout: 10 * time.Second,
+	session, err := gosmpp.NewSession(
+		gosmpp.TRXConnector(dialer, auth),
+		gosmpp.Settings{
+			EnquireLink: cfg.App.EnquireLink,
+			ReadTimeout: cfg.App.ReadTimeout,
 
 			OnSubmitError: func(_ pdu.PDU, err error) {
-				log.Fatal("SubmitPDU error:", err)
+				log.Printf("SubmitPDU error: %v", err)
 			},
 
 			OnReceivingError: func(err error) {
-				fmt.Println("Receiving PDU/Network error:", err)
+				log.Printf("Receiving PDU/Network error: %v", err)
 			},
 
 			OnRebindingError: func(err error) {
-				fmt.Println("Rebinding but error:", err)
+				log.Printf("Rebinding error: %v", err)
 			},
 
 			OnPDU: handlePDU(),
 
 			OnClosed: func(state gosmpp.State) {
-				fmt.Println(state)
+				log.Printf("Session closed: %v", state)
 			},
-		}, 5*time.Second)
+		}, cfg.App.WriteTimeout)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to create session: %v", err)
+		return
 	}
 	defer func() {
-		_ = trans.Close()
+		_ = session.Close()
 	}()
 
-	// sending SMS(s)
-	for i := 0; i < 1; i++ {
-		if err = trans.Transceiver().Submit(newSubmitSM()); err != nil {
-			fmt.Println(err)
+	log.Printf("connected to SMSC %s as %s", cfg.SMSC.Addr, cfg.SMSC.SystemID)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("shutting down sender")
+			return
+		default:
 		}
-		time.Sleep(5*time.Second)
+
+		sm := newSubmitSM(cfg)
+		if err := session.Transceiver().Submit(sm); err != nil {
+			log.Printf("submit error: %v", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			log.Println("shutting down sender")
+			return
+		case <-time.After(5 * time.Second):
+		}
 	}
 }
 
@@ -92,24 +120,22 @@ func handlePDU() func(pdu.PDU, bool) {
 	return func(p pdu.PDU, _ bool) {
 		switch pd := p.(type) {
 		case *pdu.SubmitSMResp:
-			fmt.Printf("SubmitSMResp:%+v\n", pd)
+			log.Printf("SubmitSMResp: message_id=%s", pd.MessageID)
 
 		case *pdu.GenericNack:
-			fmt.Println("GenericNack Received")
+			log.Println("GenericNack Received")
 
 		case *pdu.EnquireLinkResp:
-			fmt.Println("EnquireLinkResp Received")
+			log.Println("EnquireLinkResp Received")
 
 		case *pdu.DataSM:
-			fmt.Printf("DataSM:%+v\n", pd)
+			log.Printf("DataSM: %+v", pd)
 
 		case *pdu.DeliverSM:
-			fmt.Printf("DeliverSM:%+v\n", pd)
-			log.Println(pd.Message.GetMessage())
-			// region concatenated sms (sample code)
 			message, err := pd.Message.GetMessage()
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("failed to get DeliverSM message: %v", err)
+				return
 			}
 			totalParts, sequence, reference, found := pd.Message.UDH().GetConcatInfo()
 			if found {
@@ -117,29 +143,27 @@ func handlePDU() func(pdu.PDU, bool) {
 					concatenated[reference] = make([]string, totalParts)
 				}
 				concatenated[reference][sequence-1] = message
+				if parts, ok := concatenated[reference]; ok && isConcatenatedDone(parts, totalParts) {
+					log.Printf("DeliverSM (concatenated): %s", strings.Join(parts, ""))
+					delete(concatenated, reference)
+				}
+			} else {
+				log.Printf("DeliverSM: %s", message)
 			}
-			if !found {
-				log.Println(message)
-			} else if parts, ok := concatenated[reference]; ok && isConcatenatedDone(parts, totalParts) {
-				log.Println(strings.Join(parts, ""))
-				delete(concatenated, reference)
-			}
-			// endregion
 		}
 	}
 }
 
-func newSubmitSM() *pdu.SubmitSM {
-	// build up submitSM
+func newSubmitSM(cfg *config.Config) *pdu.SubmitSM {
 	srcAddr := pdu.NewAddress()
-	srcAddr.SetTon(5)
-	srcAddr.SetNpi(0)
-	_ = srcAddr.SetAddress("MelroseLabs")
+	srcAddr.SetTon(cfg.SourceAddr.Ton)
+	srcAddr.SetNpi(cfg.SourceAddr.Npi)
+	_ = srcAddr.SetAddress(cfg.SourceAddr.Address)
 
 	destAddr := pdu.NewAddress()
-	destAddr.SetTon(1)
-	destAddr.SetNpi(1)
-	_ = destAddr.SetAddress("447712345678")
+	destAddr.SetTon(cfg.DefaultDest.Ton)
+	destAddr.SetNpi(cfg.DefaultDest.Npi)
+	_ = destAddr.SetAddress(cfg.DefaultDest.Address)
 
 	submitSM := pdu.NewSubmitSM().(*pdu.SubmitSM)
 	submitSM.SourceAddr = srcAddr
