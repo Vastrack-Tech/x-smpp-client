@@ -2,33 +2,34 @@ package database
 
 var migrations = []string{
 	`CREATE TABLE IF NOT EXISTS accounts (
-		id         TEXT PRIMARY KEY,
-		name       TEXT NOT NULL,
-		email      TEXT NOT NULL UNIQUE,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		id            UUID PRIMARY KEY DEFAULT uuidv7(),
+		name          TEXT NOT NULL,
+		email         TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL DEFAULT '',
+		created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS api_keys (
-		id         TEXT PRIMARY KEY,
+		id         UUID PRIMARY KEY DEFAULT uuidv7(),
 		key        TEXT NOT NULL UNIQUE,
-		account_id TEXT NOT NULL REFERENCES accounts(id),
+		account_id UUID NOT NULL REFERENCES accounts(id),
 		name       TEXT NOT NULL DEFAULT '',
 		active     BOOLEAN NOT NULL DEFAULT TRUE,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS ledger_accounts (
-		id         TEXT PRIMARY KEY,
-		account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),
+		id         UUID PRIMARY KEY DEFAULT uuidv7(),
+		account_id UUID NOT NULL UNIQUE REFERENCES accounts(id),
 		currency   TEXT NOT NULL DEFAULT 'kobo',
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS ledger_balance (
-		id                TEXT PRIMARY KEY,
-		ledger_account_id TEXT NOT NULL UNIQUE REFERENCES ledger_accounts(id),
+		id                UUID PRIMARY KEY DEFAULT uuidv7(),
+		ledger_account_id UUID NOT NULL UNIQUE REFERENCES ledger_accounts(id),
 		balance           BIGINT NOT NULL DEFAULT 0,
 		version           INT NOT NULL DEFAULT 0,
 		created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -36,8 +37,8 @@ var migrations = []string{
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS ledger_entries (
-		id                TEXT PRIMARY KEY,
-		ledger_account_id TEXT NOT NULL REFERENCES ledger_accounts(id),
+		id                UUID PRIMARY KEY DEFAULT uuidv7(),
+		ledger_account_id UUID NOT NULL REFERENCES ledger_accounts(id),
 		type              TEXT NOT NULL,
 		amount            BIGINT NOT NULL,
 		reference         TEXT NOT NULL DEFAULT '',
@@ -46,8 +47,8 @@ var migrations = []string{
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS messages (
-		id          TEXT PRIMARY KEY,
-		account_id  TEXT NOT NULL REFERENCES accounts(id),
+		id          UUID PRIMARY KEY DEFAULT uuidv7(),
+		account_id  UUID NOT NULL REFERENCES accounts(id),
 		to_addr     TEXT NOT NULL,
 		text        TEXT NOT NULL,
 		encoding    TEXT NOT NULL DEFAULT 'gsm',
@@ -68,6 +69,8 @@ var migrations = []string{
 		raw         TEXT NOT NULL DEFAULT '',
 		received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
+
+	`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
 
 	`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`,
 	`CREATE INDEX IF NOT EXISTS idx_ledger_balance_account_id ON ledger_balance(ledger_account_id)`,

@@ -3,14 +3,16 @@ package config
 import "time"
 
 type Config struct {
-	App         AppConfig
-	SMSC        SMSCConfig
-	SourceAddr  AddressConfig
+	App        AppConfig
+	SMSC       SMSCConfig
+	SourceAddr AddressConfig
 	DefaultDest AddressConfig
-	TLS         TLSConfig
-	Server      ServerConfig
-	Database    DatabaseConfig
-	Encoding    string
+	TLS        TLSConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	Cache      CacheConfig
+	JWTSecret  string
+	Encoding   string
 }
 
 type AppConfig struct {
@@ -46,6 +48,12 @@ type ServerConfig struct {
 
 type DatabaseConfig struct {
 	DSN string
+}
+
+type CacheConfig struct {
+	Addr     string
+	Password string
+	DB       int
 }
 
 func (c *Config) IsProd() bool { return c.App.Env == "production" }

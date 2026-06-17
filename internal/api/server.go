@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"x-smpp-client/internal/accounts/service"
+	accountsservice "x-smpp-client/internal/accounts/service"
 	"x-smpp-client/internal/api/handlers"
+	authservice "x-smpp-client/internal/auth/service"
 	"x-smpp-client/internal/config"
 	"x-smpp-client/internal/queue"
 	"x-smpp-client/internal/routes"
@@ -18,14 +19,14 @@ type Server struct {
 	cfg config.ServerConfig
 }
 
-func New(q *queue.Queue, svc *service.Service, cfg config.ServerConfig) *Server {
+func New(q *queue.Queue, svc *accountsservice.Service, auth *authservice.AuthService, cfg config.ServerConfig) *Server {
 	app := fiber.New(fiber.Config{
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	})
 
 	h := handlers.New(q, svc)
-	routes.RegisterRoutes(app, h)
+	routes.RegisterRoutes(app, h, auth)
 
 	return &Server{app: app, cfg: cfg}
 }

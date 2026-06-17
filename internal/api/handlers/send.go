@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"x-smpp-client/internal/models"
 	"x-smpp-client/internal/utils"
 )
@@ -21,19 +20,7 @@ func (h *Handler) HandleSend(c *fiber.Ctx) error {
 		})
 	}
 
-	apiKey := c.Get("X-API-Key")
-	if apiKey == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "missing X-API-Key header",
-		})
-	}
-
-	account, err := h.Accounts.ValidateAPIKey(c.Context(), apiKey)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "invalid API key",
-		})
-	}
+	account := c.Locals("account").(*models.Account)
 
 	if err := h.Accounts.CheckBalance(c.Context(), account.ID, 1); err != nil {
 		return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
@@ -42,7 +29,6 @@ func (h *Handler) HandleSend(c *fiber.Ctx) error {
 	}
 
 	msg := models.Message{
-		ID:         uuid.New().String(),
 		AccountID:  account.ID,
 		To:         req.To,
 		Text:       req.Text,

@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"x-smpp-client/internal/accounts/dto"
 	"x-smpp-client/internal/accounts/repository"
 	"x-smpp-client/internal/models"
+	"x-smpp-client/internal/utils"
 )
 
 const costPerPart int64 = 1
@@ -20,21 +22,30 @@ func New(repo repository.Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) CreateAccount(ctx context.Context, name, email string) (*models.Account, error) {
+func (s *Service) CreateAccount(ctx context.Context, name, email, password string) (*dto.CreatedAccount, error) {
 	now := time.Now()
+
+	pwHash := ""
+	if password != "" {
+		var err error
+		pwHash, err = utils.HashPassword(password)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+	}
+
 	a := &models.Account{
-		ID:        uuid.New().String(),
-		Name:      name,
-		Email:     email,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Name:         name,
+		Email:        email,
+		PasswordHash: pwHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := s.repo.CreateAccount(ctx, a); err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 
 	la := &models.LedgerAccount{
-		ID:        uuid.New().String(),
 		AccountID: a.ID,
 		Currency:  "kobo",
 		CreatedAt: now,
@@ -45,7 +56,6 @@ func (s *Service) CreateAccount(ctx context.Context, name, email string) (*model
 	}
 
 	lb := &models.LedgerBalance{
-		ID:              uuid.New().String(),
 		LedgerAccountID: la.ID,
 		Balance:         0,
 		Version:         0,
@@ -56,7 +66,18 @@ func (s *Service) CreateAccount(ctx context.Context, name, email string) (*model
 		return nil, fmt.Errorf("create ledger balance: %w", err)
 	}
 
-	return a, nil
+	k := &models.APIKey{
+		Key:       uuid.New().String(),
+		AccountID: a.ID,
+		Name:      "default",
+		Active:    true,
+		CreatedAt: now,
+	}
+	if err := s.repo.CreateAPIKey(ctx, k); err != nil {
+		return nil, fmt.Errorf("create api key: %w", err)
+	}
+
+	return &dto.CreatedAccount{Account: a, APIKey: k}, nil
 }
 
 func (s *Service) GetAccount(ctx context.Context, id string) (*models.Account, error) {
@@ -122,7 +143,6 @@ func (s *Service) ValidateAPIKey(ctx context.Context, key string) (*models.Accou
 
 func (s *Service) CreateAPIKey(ctx context.Context, accountID, name string) (*models.APIKey, error) {
 	k := &models.APIKey{
-		ID:        uuid.New().String(),
 		Key:       uuid.New().String(),
 		AccountID: accountID,
 		Name:      name,

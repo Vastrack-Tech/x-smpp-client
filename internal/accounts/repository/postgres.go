@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"x-smpp-client/internal/database"
 	"x-smpp-client/internal/models"
@@ -20,19 +19,33 @@ func NewPostgresRepo(db *database.DB) *PostgresRepo {
 }
 
 func (r *PostgresRepo) CreateAccount(ctx context.Context, a *models.Account) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO accounts (id, name, email, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		a.ID, a.Name, a.Email, a.CreatedAt, a.UpdatedAt,
-	)
+	err := r.db.Pool.QueryRow(ctx,
+		`INSERT INTO accounts (name, email, password_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		a.Name, a.Email, a.PasswordHash, a.CreatedAt, a.UpdatedAt,
+	).Scan(&a.ID)
 	return err
 }
 
 func (r *PostgresRepo) GetAccount(ctx context.Context, id string) (*models.Account, error) {
 	a := &models.Account{}
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, name, email, created_at, updated_at FROM accounts WHERE id = $1`, id,
-	).Scan(&a.ID, &a.Name, &a.Email, &a.CreatedAt, &a.UpdatedAt)
+		`SELECT id, name, email, password_hash, created_at, updated_at FROM accounts WHERE id = $1`, id,
+	).Scan(&a.ID, &a.Name, &a.Email, &a.PasswordHash, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("account not found")
+		}
+		return nil, err
+	}
+	return a, nil
+}
+
+func (r *PostgresRepo) GetAccountByEmail(ctx context.Context, email string) (*models.Account, error) {
+	a := &models.Account{}
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT id, name, email, password_hash, created_at, updated_at FROM accounts WHERE email = $1`, email,
+	).Scan(&a.ID, &a.Name, &a.Email, &a.PasswordHash, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("account not found")
@@ -43,11 +56,11 @@ func (r *PostgresRepo) GetAccount(ctx context.Context, id string) (*models.Accou
 }
 
 func (r *PostgresRepo) CreateAPIKey(ctx context.Context, k *models.APIKey) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO api_keys (id, key, account_id, name, active, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		k.ID, k.Key, k.AccountID, k.Name, k.Active, k.CreatedAt,
-	)
+	err := r.db.Pool.QueryRow(ctx,
+		`INSERT INTO api_keys (key, account_id, name, active, created_at)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		k.Key, k.AccountID, k.Name, k.Active, k.CreatedAt,
+	).Scan(&k.ID)
 	return err
 }
 
@@ -86,20 +99,20 @@ func (r *PostgresRepo) ListAPIKeys(ctx context.Context, accountID string) ([]mod
 }
 
 func (r *PostgresRepo) CreateLedgerAccount(ctx context.Context, la *models.LedgerAccount) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO ledger_accounts (id, account_id, currency, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		la.ID, la.AccountID, la.Currency, la.CreatedAt, la.UpdatedAt,
-	)
+	err := r.db.Pool.QueryRow(ctx,
+		`INSERT INTO ledger_accounts (account_id, currency, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
+		la.AccountID, la.Currency, la.CreatedAt, la.UpdatedAt,
+	).Scan(&la.ID)
 	return err
 }
 
 func (r *PostgresRepo) CreateLedgerBalance(ctx context.Context, lb *models.LedgerBalance) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO ledger_balance (id, ledger_account_id, balance, version, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		lb.ID, lb.LedgerAccountID, lb.Balance, lb.Version, lb.CreatedAt, lb.UpdatedAt,
-	)
+	err := r.db.Pool.QueryRow(ctx,
+		`INSERT INTO ledger_balance (ledger_account_id, balance, version, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		lb.LedgerAccountID, lb.Balance, lb.Version, lb.CreatedAt, lb.UpdatedAt,
+	).Scan(&lb.ID)
 	return err
 }
 
@@ -165,7 +178,6 @@ func (r *PostgresRepo) ApplyBalanceChange(ctx context.Context, accountID string,
 	}
 
 	e := &models.LedgerEntry{
-		ID:              uuid.New().String(),
 		LedgerAccountID: la.ID,
 		Type:            entryType,
 		Amount:          change,
@@ -173,11 +185,11 @@ func (r *PostgresRepo) ApplyBalanceChange(ctx context.Context, accountID string,
 		Description:     description,
 		CreatedAt:       time.Now(),
 	}
-	_, err = tx.Exec(ctx,
-		`INSERT INTO ledger_entries (id, ledger_account_id, type, amount, reference, description, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		e.ID, e.LedgerAccountID, e.Type, e.Amount, e.Reference, e.Description, e.CreatedAt,
-	)
+	err = tx.QueryRow(ctx,
+		`INSERT INTO ledger_entries (ledger_account_id, type, amount, reference, description, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		e.LedgerAccountID, e.Type, e.Amount, e.Reference, e.Description, e.CreatedAt,
+	).Scan(&e.ID)
 	if err != nil {
 		return nil, fmt.Errorf("insert ledger entry: %w", err)
 	}
@@ -235,11 +247,11 @@ func (r *PostgresRepo) GetLedgerEntries(ctx context.Context, ledgerAccountID str
 }
 
 func (r *PostgresRepo) CreateMessage(ctx context.Context, m *models.Message) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`INSERT INTO messages (id, account_id, to_addr, text, encoding, source_addr, status, cost, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		m.ID, m.AccountID, m.To, m.Text, m.Encoding, m.SourceAddr, m.Status, m.Cost, m.CreatedAt, m.UpdatedAt,
-	)
+	err := r.db.Pool.QueryRow(ctx,
+		`INSERT INTO messages (account_id, to_addr, text, encoding, source_addr, status, cost, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+		m.AccountID, m.To, m.Text, m.Encoding, m.SourceAddr, m.Status, m.Cost, m.CreatedAt, m.UpdatedAt,
+	).Scan(&m.ID)
 	return err
 }
 

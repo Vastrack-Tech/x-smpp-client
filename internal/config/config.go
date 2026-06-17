@@ -72,4 +72,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.queue_size", 1000)
 
 	v.SetDefault("database.dsn", "postgres://postgres:postgres@localhost:5432/xsmpp?sslmode=disable")
+
+	v.SetDefault("cache.addr", "localhost:6379")
+	v.SetDefault("cache.password", "")
+	v.SetDefault("cache.db", 0)
+
+	v.SetDefault("jwt_secret", "change-me-in-production")
 }

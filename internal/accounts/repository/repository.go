@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	CreateAccount(ctx context.Context, a *models.Account) error
 	GetAccount(ctx context.Context, id string) (*models.Account, error)
+	GetAccountByEmail(ctx context.Context, email string) (*models.Account, error)
 
 	CreateAPIKey(ctx context.Context, k *models.APIKey) error
 	GetAPIKey(ctx context.Context, key string) (*models.APIKey, error)
