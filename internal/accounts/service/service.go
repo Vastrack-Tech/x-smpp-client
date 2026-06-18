@@ -155,6 +155,10 @@ func (s *Service) CreateAPIKey(ctx context.Context, accountID, name string) (*mo
 	return k, nil
 }
 
+func (s *Service) ListAPIKeys(ctx context.Context, accountID string) ([]models.APIKey, error) {
+	return s.repo.ListAPIKeys(ctx, accountID)
+}
+
 func (s *Service) CreateMessage(ctx context.Context, m *models.Message) error {
 	m.CreatedAt = time.Now()
 	m.UpdatedAt = m.CreatedAt

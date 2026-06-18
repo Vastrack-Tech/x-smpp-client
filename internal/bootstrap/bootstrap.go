@@ -8,7 +8,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/linxGnu/gosmpp/pdu"
 	"x-smpp-client/infra/cache"
 	"x-smpp-client/internal/accounts/repository"
 	"x-smpp-client/internal/accounts/service"
@@ -18,6 +17,8 @@ import (
 	"x-smpp-client/internal/database"
 	"x-smpp-client/internal/queue"
 	"x-smpp-client/internal/session"
+
+	"github.com/linxGnu/gosmpp/pdu"
 )
 
 func Run(cfgPath string) error {
@@ -26,7 +27,8 @@ func Run(cfgPath string) error {
 		return err
 	}
 
-	db, err := database.New(context.Background(), cfg.Database.DSN)
+	// startup database and redis (migrations)
+	db, err := database.New(context.Background(), cfg.DatabaseDSN)
 	if err != nil {
 		return err
 	}
@@ -36,12 +38,14 @@ func Run(cfgPath string) error {
 		return err
 	}
 
-	rdb, err := database.NewRedis(context.Background(), cfg.Cache.Addr, cfg.Cache.Password, cfg.Cache.DB)
+	rdb, err := database.NewRedis(context.Background(), cfg.CacheAddr, cfg.CachePassword, cfg.CacheDB)
 	if err != nil {
 		return err
 	}
 	defer rdb.Close()
+	//  // /// //
 
+	// initialize repository and service
 	repo := repository.NewPostgresRepo(db)
 	svc := service.New(repo)
 
@@ -51,6 +55,7 @@ func Run(cfgPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// setup session pool (number of managers of the underlying gosmpp connections)
 	pool := session.NewPool(cfg)
 	pool.OnPDU(makePDUHandler(svc))
 
@@ -58,12 +63,12 @@ func Run(cfgPath string) error {
 		return err
 	}
 
-	msgQueue := queue.New(cfg.Server.QueueSize)
+	msgQueue := queue.New(cfg.ServerQueueSize)
 
 	worker := queue.NewWorker(pool, msgQueue, svc, queue.Defaults{
-		SourceAddr: cfg.SourceAddr.Address,
-		SourceTon:  cfg.SourceAddr.Ton,
-		SourceNpi:  cfg.SourceAddr.Npi,
+		SourceAddr: cfg.SourceAddr,
+		SourceTon:  cfg.SourceTon,
+		SourceNpi:  cfg.SourceNpi,
 		Encoding:   cfg.Encoding,
 	})
 
@@ -78,7 +83,7 @@ func Run(cfgPath string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		srv := api.New(msgQueue, svc, authSvc, cfg.Server)
+		srv := api.New(msgQueue, svc, authSvc, cfg.ServerListenAddr)
 		if err := srv.Serve(ctx); err != nil {
 			log.Printf("api server error: %v", err)
 		}

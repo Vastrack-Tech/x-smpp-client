@@ -9,17 +9,16 @@ import (
 	accountsservice "x-smpp-client/internal/accounts/service"
 	"x-smpp-client/internal/api/handlers"
 	authservice "x-smpp-client/internal/auth/service"
-	"x-smpp-client/internal/config"
 	"x-smpp-client/internal/queue"
 	"x-smpp-client/internal/routes"
 )
 
 type Server struct {
-	app *fiber.App
-	cfg config.ServerConfig
+	app        *fiber.App
+	listenAddr string
 }
 
-func New(q *queue.Queue, svc *accountsservice.Service, auth *authservice.AuthService, cfg config.ServerConfig) *Server {
+func New(q *queue.Queue, svc *accountsservice.Service, auth *authservice.AuthService, listenAddr string) *Server {
 	app := fiber.New(fiber.Config{
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -28,7 +27,7 @@ func New(q *queue.Queue, svc *accountsservice.Service, auth *authservice.AuthSer
 	h := handlers.New(q, svc)
 	routes.RegisterRoutes(app, h, auth)
 
-	return &Server{app: app, cfg: cfg}
+	return &Server{app: app, listenAddr: listenAddr}
 }
 
 func (s *Server) Serve(ctx context.Context) error {
@@ -37,8 +36,8 @@ func (s *Server) Serve(ctx context.Context) error {
 		_ = s.app.ShutdownWithTimeout(5 * time.Second)
 	}()
 
-	log.Printf("API server listening on %s", s.cfg.ListenAddr)
-	if err := s.app.Listen(s.cfg.ListenAddr); err != nil {
+	log.Printf("API server listening on %s", s.listenAddr)
+	if err := s.app.Listen(s.listenAddr); err != nil {
 		return err
 	}
 	return nil

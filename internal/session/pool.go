@@ -12,11 +12,11 @@ import (
 
 const DefaultPoolSize = 1
 
-func PoolSize(cfg config.AppConfig) int {
-	if cfg.PoolSize < 1 {
+func PoolSize(n int) int {
+	if n < 1 {
 		return DefaultPoolSize
 	}
-	return cfg.PoolSize
+	return n
 }
 
 type Pool struct {
@@ -25,10 +25,10 @@ type Pool struct {
 }
 
 func NewPool(cfg *config.Config) *Pool {
-	size := PoolSize(cfg.App)
+	size := PoolSize(cfg.PoolSize)
 	managers := make([]*Manager, size)
 	for i := 0; i < size; i++ {
-		managers[i] = NewManager(cfg.SMSC, cfg.TLS, cfg.App)
+		managers[i] = NewManager(cfg)
 	}
 	return &Pool{managers: managers}
 }

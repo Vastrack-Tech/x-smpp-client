@@ -97,3 +97,12 @@ func (h *Handler) HandleCreateAPIKey(c *fiber.Ctx) error {
 	}
 	return c.Status(201).JSON(k)
 }
+
+func (h *Handler) HandleListAPIKeys(c *fiber.Ctx) error {
+	account := c.Locals("account").(*models.Account)
+	keys, err := h.svc.ListAPIKeys(c.Context(), account.ID)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(keys)
+}

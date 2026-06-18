@@ -1,60 +1,37 @@
 package config
 
-import "time"
-
 type Config struct {
-	App        AppConfig
-	SMSC       SMSCConfig
-	SourceAddr AddressConfig
-	DefaultDest AddressConfig
-	TLS        TLSConfig
-	Server     ServerConfig
-	Database   DatabaseConfig
-	Cache      CacheConfig
-	JWTSecret  string
-	Encoding   string
+	AppEnv         string `mapstructure:"APP_ENV"`
+	EnquireLink    int    `mapstructure:"ENQUIRE_LINK"`
+	ReadTimeout    int    `mapstructure:"READ_TIMEOUT"`
+	WriteTimeout   int    `mapstructure:"WRITE_TIMEOUT"`
+	PoolSize       int    `mapstructure:"POOL_SIZE"`
+
+	SMSCAddr       string `mapstructure:"SMSC_ADDR"`
+	SMSCSystemID   string `mapstructure:"SMSC_SYSTEM_ID"`
+	SMSCPassword   string `mapstructure:"SMSC_PASSWORD"`
+	SMSCSystemType string `mapstructure:"SMSC_SYSTEM_TYPE"`
+
+	SourceAddr     string `mapstructure:"SOURCE_ADDR"`
+	SourceTon      uint8  `mapstructure:"SOURCE_TON"`
+	SourceNpi      uint8  `mapstructure:"SOURCE_NPI"`
+
+	TLSEnabled    bool `mapstructure:"TLS_ENABLED"`
+	TLSSkipVerify bool `mapstructure:"TLS_SKIP_VERIFY"`
+
+	Encoding string `mapstructure:"ENCODING"`
+
+	ServerListenAddr string `mapstructure:"SERVER_LISTEN_ADDR"`
+	ServerQueueSize  int    `mapstructure:"SERVER_QUEUE_SIZE"`
+
+	DatabaseDSN string `mapstructure:"DATABASE_DSN"`
+
+	CacheAddr     string `mapstructure:"CACHE_ADDR"`
+	CachePassword string `mapstructure:"CACHE_PASSWORD"`
+	CacheDB       int    `mapstructure:"CACHE_DB"`
+
+	JWTSecret string `mapstructure:"JWT_SECRET"`
 }
 
-type AppConfig struct {
-	Env          string
-	EnquireLink  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	PoolSize     int
-}
-
-type SMSCConfig struct {
-	Addr       string
-	SystemID   string
-	Password   string
-	SystemType string
-}
-
-type AddressConfig struct {
-	Address string
-	Ton     uint8
-	Npi     uint8
-}
-
-type TLSConfig struct {
-	Enabled    bool
-	SkipVerify bool
-}
-
-type ServerConfig struct {
-	ListenAddr string
-	QueueSize  int
-}
-
-type DatabaseConfig struct {
-	DSN string
-}
-
-type CacheConfig struct {
-	Addr     string
-	Password string
-	DB       int
-}
-
-func (c *Config) IsProd() bool { return c.App.Env == "production" }
-func (c *Config) IsDev() bool  { return c.App.Env == "development" }
+func (c *Config) IsProd() bool { return c.AppEnv == "production" }
+func (c *Config) IsDev() bool  { return c.AppEnv == "development" }

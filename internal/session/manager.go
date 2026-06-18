@@ -15,9 +15,7 @@ import (
 )
 
 type Manager struct {
-	smsc config.SMSCConfig
-	tls  config.TLSConfig
-	app  config.AppConfig
+	cfg *config.Config
 
 	session *gosmpp.Session
 	mu      sync.RWMutex
@@ -27,12 +25,8 @@ type Manager struct {
 	cancel context.CancelFunc
 }
 
-func NewManager(smsc config.SMSCConfig, tlsCfg config.TLSConfig, app config.AppConfig) *Manager {
-	return &Manager{
-		smsc: smsc,
-		tls:  tlsCfg,
-		app:  app,
-	}
+func NewManager(cfg *config.Config) *Manager {
+	return &Manager{cfg: cfg}
 }
 
 func (m *Manager) Connect(ctx context.Context) error {
@@ -40,14 +34,14 @@ func (m *Manager) Connect(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	auth := gosmpp.Auth{
-		SMSC:       m.smsc.Addr,
-		SystemID:   m.smsc.SystemID,
-		Password:   m.smsc.Password,
-		SystemType: m.smsc.SystemType,
+		SMSC:       m.cfg.SMSCAddr,
+		SystemID:   m.cfg.SMSCSystemID,
+		Password:   m.cfg.SMSCPassword,
+		SystemType: m.cfg.SMSCSystemType,
 	}
 
 	dialer := gosmpp.NonTLSDialer
-	if m.tls.Enabled {
+	if m.cfg.TLSEnabled {
 		dialer = m.tlsDialer()
 	}
 
@@ -56,8 +50,8 @@ func (m *Manager) Connect(ctx context.Context) error {
 	session, err := gosmpp.NewSession(
 		gosmpp.TRXConnector(dialer, auth),
 		gosmpp.Settings{
-			EnquireLink: m.app.EnquireLink,
-			ReadTimeout: m.app.ReadTimeout,
+			EnquireLink: time.Duration(m.cfg.EnquireLink) * time.Second,
+			ReadTimeout: time.Duration(m.cfg.ReadTimeout) * time.Second,
 
 			OnSubmitError: func(_ pdu.PDU, err error) {
 				log.Printf("SubmitPDU error: %v", err)
@@ -80,13 +74,13 @@ func (m *Manager) Connect(ctx context.Context) error {
 			OnClosed: func(state gosmpp.State) {
 				log.Printf("Session closed: %v", state)
 			},
-		}, m.app.WriteTimeout)
+		}, time.Duration(m.cfg.WriteTimeout)*time.Second)
 	if err != nil {
 		return err
 	}
 
 	m.session = session
-	log.Printf("connected to SMSC %s as %s", m.smsc.Addr, m.smsc.SystemID)
+	log.Printf("connected to SMSC %s as %s", m.cfg.SMSCAddr, m.cfg.SMSCSystemID)
 	return nil
 }
 
@@ -132,10 +126,9 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) tlsDialer() gosmpp.Dialer {
-	skip := m.tls.SkipVerify
 	return func(addr string) (net.Conn, error) {
 		conf := &tls.Config{
-			InsecureSkipVerify: skip,
+			InsecureSkipVerify: m.cfg.TLSSkipVerify,
 		}
 		return tls.Dial("tcp", addr, conf)
 	}
