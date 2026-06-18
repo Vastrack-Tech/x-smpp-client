@@ -12,7 +12,7 @@ import (
 func RegisterRoutes(app *fiber.App, h *handlers.Handler, authSvc *service.AuthService) {
 	app.Get("/health", h.HandleHealth)
 
-	authH := handler.New(authSvc)
+	authH := handler.New(authSvc, h.Accounts)
 
 	api := app.Group("/api")
 
@@ -22,7 +22,8 @@ func RegisterRoutes(app *fiber.App, h *handlers.Handler, authSvc *service.AuthSe
 	authed.Post("/send", h.HandleSend)
 	authed.Get("/balance", h.HandleGetBalance)
 
-	app.Post("/login", authH.HandleLogin)
+	app.Post("/auth/register", authH.HandleRegister)
+	app.Post("/auth/login", authH.HandleLogin)
 
 	dashboard := app.Group("/dashboard", middleware.JWTAuth(authSvc), resolveAccount(h.Accounts))
 	dashboard.Post("/logout", authH.HandleLogout)

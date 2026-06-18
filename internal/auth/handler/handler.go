@@ -5,14 +5,37 @@ import (
 	"x-smpp-client/internal/api/middleware"
 	"x-smpp-client/internal/auth/dto"
 	"x-smpp-client/internal/auth/service"
+	accountsservice "x-smpp-client/internal/accounts/service"
 )
 
 type AuthHandler struct {
-	svc *service.AuthService
+	svc         *service.AuthService
+	accountsSvc *accountsservice.Service
 }
 
-func New(svc *service.AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func New(svc *service.AuthService, accountsSvc *accountsservice.Service) *AuthHandler {
+	return &AuthHandler{svc: svc, accountsSvc: accountsSvc}
+}
+
+func (h *AuthHandler) HandleRegister(c *fiber.Ctx) error {
+	var req dto.RegisterRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	}
+	if req.Email == "" || req.Password == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "email and password required"})
+	}
+
+	if _, err := h.accountsSvc.CreateAccount(c.Context(), req.Email, req.Email, req.Password); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	token, _, err := h.svc.Login(c.Context(), req.Email, req.Password)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "registration succeeded but login failed"})
+	}
+
+	return c.Status(201).JSON(dto.RegisterResponse{Token: token})
 }
 
 func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
