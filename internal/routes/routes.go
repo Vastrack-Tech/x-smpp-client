@@ -35,16 +35,18 @@ func RegisterRoutes(app *fiber.App, h *handlers.Handler, authSvc *service.AuthSe
 }
 
 func resolveAccount(svc *accountsservice.Service) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		id, ok := middleware.AccountIDFrom(c.Context())
-		if !ok {
-			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
-		}
-		account, err := svc.GetAccount(c.Context(), id)
-		if err != nil {
-			return c.Status(401).JSON(fiber.Map{"error": "account not found"})
-		}
-		c.Locals("account", account)
-		return c.Next()
-	}
+    return func(c *fiber.Ctx) error {
+        id, ok := middleware.AccountIDFrom(c)
+        if !ok {
+            return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+        }
+
+        account, err := svc.GetAccount(c.Context(), id)
+        if err != nil {
+            return c.Status(401).JSON(fiber.Map{"error": "account not found"})
+        }
+
+        c.Locals("account", account)
+        return c.Next()
+    }
 }

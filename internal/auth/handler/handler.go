@@ -61,7 +61,7 @@ func (h *AuthHandler) HandleLogin(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) HandleLogout(c *fiber.Ctx) error {
-	accountID, _ := middleware.AccountIDFrom(c.Context())
+	accountID, _ := middleware.AccountIDFrom(c)
 	tokenStr := extractBearer(c)
 	if tokenStr == "" {
 		return c.SendStatus(204)
@@ -74,7 +74,7 @@ func (h *AuthHandler) HandleLogout(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) HandleMe(c *fiber.Ctx) error {
-	accountID, _ := middleware.AccountIDFrom(c.Context())
+	accountID, _ := middleware.AccountIDFrom(c)
 
 	acc, err := h.svc.GetAccount(c.Context(), accountID)
 	if err != nil {

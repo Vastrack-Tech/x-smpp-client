@@ -1,8 +1,7 @@
 package middleware
 
 import (
-	"context"
-	"errors"
+        "errors"
 
 	"github.com/gofiber/fiber/v2"
 	"x-smpp-client/internal/auth/service"
@@ -12,9 +11,9 @@ type ctxKey string
 
 const accountIDKey ctxKey = "account_id"
 
-func AccountIDFrom(ctx context.Context) (string, bool) {
-	id, ok := ctx.Value(accountIDKey).(string)
-	return id, ok
+func AccountIDFrom(c *fiber.Ctx) (string, bool) {
+    id, ok := c.Locals("account_id").(string)
+    return id, ok
 }
 
 func JWTAuth(auth *service.AuthService) fiber.Handler {
@@ -33,9 +32,9 @@ func JWTAuth(auth *service.AuthService) fiber.Handler {
 			return c.Status(status).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		ctx := context.WithValue(c.Context(), accountIDKey, accountID)
-		c.SetUserContext(ctx)
-		return c.Next()
+		c.Locals("account_id", accountID)
+
+        return c.Next()
 	}
 }
 
