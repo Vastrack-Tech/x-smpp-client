@@ -39,6 +39,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 		Password:   m.cfg.SMSCPassword,
 		SystemType: m.cfg.SMSCSystemType,
 	}
+	log.Printf("Auth.SMSC=%q", auth.SMSC)
 
 	dialer := gosmpp.NonTLSDialer
 	if m.cfg.TLSEnabled {

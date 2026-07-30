@@ -39,7 +39,11 @@ func Run(cfgPath string) error {
     log.Printf("cfg.ReadTimeout=%d", cfg.ReadTimeout)
     log.Printf("os.Getenv(ENQUIRE_LINK)=%q", os.Getenv("ENQUIRE_LINK"))
     log.Printf("os.Getenv(READ_TIMEOUT)=%q", os.Getenv("READ_TIMEOUT"))
-	
+
+	log.Printf("SMSC_ADDR=%q", cfg.SMSCAddr)
+    log.Printf("SMSC_SYSTEM_ID=%q", cfg.SMSCSystemID)
+    log.Printf("SMSC_PASSWORD set=%v", cfg.SMSCPassword != "")
+
 	// startup database and redis (migrations)
 	db, err := database.New(context.Background(), cfg.DatabaseDSN)
 	if err != nil {
@@ -68,8 +72,24 @@ func Run(cfgPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+    log.Printf("cfg.SMSCAddr=%q", cfg.SMSCAddr)
+    log.Printf("cfg.SMSCSystemID=%q", cfg.SMSCSystemID)
+    log.Printf("cfg.SMSCPassword set=%t", cfg.SMSCPassword != "")
+    log.Printf("cfg.ServerListenAddr=%q", cfg.ServerListenAddr)
+
 	// setup session pool (number of managers of the underlying gosmpp connections)
 	pool := session.NewPool(cfg)
+	// setup session pool (number of managers of the underlying gosmpp connections)
+    log.Printf("cfg.WriteTimeout=%d", cfg.WriteTimeout)
+    log.Printf("cfg.SMSCAddr=%q", cfg.SMSCAddr)
+    log.Printf("cfg.SMSCSystemID=%q", cfg.SMSCSystemID)
+    log.Printf("cfg.TLSEnabled=%v", cfg.TLSEnabled)
+
+     pool.OnPDU(makePDUHandler(svc))
+
+if err := pool.Start(ctx); err != nil {
+    return err
+}
 	pool.OnPDU(makePDUHandler(svc))
 
 	if err := pool.Start(ctx); err != nil {
