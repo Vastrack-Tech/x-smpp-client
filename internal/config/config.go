@@ -19,8 +19,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, err
-	}
+     // Ignore missing .env on production
+    }
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg, func(c *mapstructure.DecoderConfig) {
