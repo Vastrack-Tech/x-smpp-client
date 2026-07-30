@@ -26,6 +26,7 @@ func Run(cfgPath string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("DATABASE_DSN=%q", cfg.DatabaseDSN)
 
 	// startup database and redis (migrations)
 	db, err := database.New(context.Background(), cfg.DatabaseDSN)
