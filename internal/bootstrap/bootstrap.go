@@ -40,7 +40,7 @@ func Run(cfgPath string) error {
 	if err := db.Migrate(context.Background()); err != nil {
 		return err
 	}
-
+	log.Printf("CACHE_ADDR=%q", cfg.CacheAddr)
 	rdb, err := database.NewRedis(context.Background(), cfg.CacheAddr, cfg.CachePassword, cfg.CacheDB)
 	if err != nil {
 		return err
