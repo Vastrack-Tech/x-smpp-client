@@ -35,6 +35,11 @@ func Run(cfgPath string) error {
     log.Printf("os.Getenv(CACHE_PASSWORD)=%q", os.Getenv("CACHE_PASSWORD"))
     log.Printf("os.Getenv(CACHE_DB)=%q", os.Getenv("CACHE_DB"))
 
+    log.Printf("cfg.EnquireLink=%d", cfg.EnquireLink)
+    log.Printf("cfg.ReadTimeout=%d", cfg.ReadTimeout)
+    log.Printf("os.Getenv(ENQUIRE_LINK)=%q", os.Getenv("ENQUIRE_LINK"))
+    log.Printf("os.Getenv(READ_TIMEOUT)=%q", os.Getenv("READ_TIMEOUT"))
+	
 	// startup database and redis (migrations)
 	db, err := database.New(context.Background(), cfg.DatabaseDSN)
 	if err != nil {
