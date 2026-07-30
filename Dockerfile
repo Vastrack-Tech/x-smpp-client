@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/x-smpp-client .
-COPY .env /app/.env
 
 EXPOSE 8080
 ENTRYPOINT ["./x-smpp-client"]
