@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
@@ -26,6 +28,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	}); err != nil {
 		return nil, err
 	}
-
+// Allow Render (and other cloud platforms) to override the listen port.
+    if port := os.Getenv("PORT"); port != "" {
+        cfg.ServerListenAddr = ":" + port
+   }  
 	return &cfg, nil
 }
