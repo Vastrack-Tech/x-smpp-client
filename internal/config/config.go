@@ -14,6 +14,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetConfigType("env")
 	v.AutomaticEnv()
 	v.BindEnv("DATABASE_DSN")
+	v.BindEnv("ENQUIRE_LINK")
+    v.BindEnv("READ_TIMEOUT")
 
 	if err := v.BindEnv("DATABASE_DSN"); err != nil {
         return nil, err
@@ -25,6 +27,13 @@ func LoadConfig(configPath string) (*Config, error) {
         return nil, err
     }
     if err := v.BindEnv("CACHE_DB"); err != nil {
+        return nil, err
+    }
+	if err := v.BindEnv("ENQUIRE_LINK"); err != nil {
+        return nil, err
+    }
+
+    if err := v.BindEnv("READ_TIMEOUT"); err != nil {
         return nil, err
     }
 
