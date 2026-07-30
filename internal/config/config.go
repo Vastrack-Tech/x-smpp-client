@@ -14,6 +14,10 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetConfigType("env")
 	v.AutomaticEnv()
 
+	if err := v.BindEnv("DATABASE_DSN"); err != nil {
+        return nil, err
+    }
+
 	if configPath != "" {
 		v.AddConfigPath(configPath)
 	}
