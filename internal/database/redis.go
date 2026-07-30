@@ -10,7 +10,6 @@ import (
 type Redis struct {
 	Client *redis.Client
 }
-
 func NewRedis(ctx context.Context, addr, password string, db int) (*Redis, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,

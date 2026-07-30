@@ -30,6 +30,11 @@ func Run(cfgPath string) error {
 	log.Printf("cfg.DatabaseDSN=%q", cfg.DatabaseDSN)
     log.Printf("os.Getenv(DATABASE_DSN)=%q", os.Getenv("DATABASE_DSN"))
 
+	log.Printf("cfg.CacheAddr=%q", cfg.CacheAddr)
+    log.Printf("os.Getenv(CACHE_ADDR)=%q", os.Getenv("CACHE_ADDR"))
+    log.Printf("os.Getenv(CACHE_PASSWORD)=%q", os.Getenv("CACHE_PASSWORD"))
+    log.Printf("os.Getenv(CACHE_DB)=%q", os.Getenv("CACHE_DB"))
+
 	// startup database and redis (migrations)
 	db, err := database.New(context.Background(), cfg.DatabaseDSN)
 	if err != nil {

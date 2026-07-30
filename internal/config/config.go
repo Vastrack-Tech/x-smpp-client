@@ -13,8 +13,18 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetConfigName(".env")
 	v.SetConfigType("env")
 	v.AutomaticEnv()
+	v.BindEnv("DATABASE_DSN")
 
 	if err := v.BindEnv("DATABASE_DSN"); err != nil {
+        return nil, err
+    }
+	if err := v.BindEnv("CACHE_ADDR"); err != nil {
+        return nil, err
+    }
+    if err := v.BindEnv("CACHE_PASSWORD"); err != nil {
+        return nil, err
+    }
+    if err := v.BindEnv("CACHE_DB"); err != nil {
         return nil, err
     }
 
