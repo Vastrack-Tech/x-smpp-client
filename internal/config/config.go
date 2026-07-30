@@ -13,9 +13,37 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetConfigName(".env")
 	v.SetConfigType("env")
 	v.AutomaticEnv()
+
 	v.BindEnv("DATABASE_DSN")
 	v.BindEnv("ENQUIRE_LINK")
     v.BindEnv("READ_TIMEOUT")
+	v.BindEnv("WRITE_TIMEOUT")
+    v.BindEnv("POOL_SIZE")
+
+    v.BindEnv("SMSC_ADDR")
+    v.BindEnv("SMSC_SYSTEM_ID")
+    v.BindEnv("SMSC_PASSWORD")
+    v.BindEnv("SMSC_SYSTEM_TYPE")
+
+    v.BindEnv("SOURCE_ADDR")
+    v.BindEnv("SOURCE_TON")
+    v.BindEnv("SOURCE_NPI")
+
+    v.BindEnv("TLS_ENABLED")
+    v.BindEnv("TLS_SKIP_VERIFY")
+
+    v.BindEnv("ENCODING")
+
+    v.BindEnv("SERVER_LISTEN_ADDR")
+    v.BindEnv("SERVER_QUEUE_SIZE")
+
+    v.BindEnv("DATABASE_DSN")
+
+    v.BindEnv("CACHE_ADDR")
+    v.BindEnv("CACHE_PASSWORD")
+    v.BindEnv("CACHE_DB")
+
+    v.BindEnv("JWT_SECRET")
 
 	if err := v.BindEnv("DATABASE_DSN"); err != nil {
         return nil, err
